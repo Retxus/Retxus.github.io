@@ -94,7 +94,7 @@ Vemos que nos encuentra una ruta `control` y sobre esa ruta volvemos a fuzzear y
 Procedemos a clonar el repositorio y a entablar una revshel.
 ![](/assets/img/HTB-Bizness/1_Bizness.png)
 
-Lugo hacemos el tratamiento de la `tty`
+Luego hacemos el tratamiento de la `tty`
 
 ```bash
 script /dev/null -c bash
