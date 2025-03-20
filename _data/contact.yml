@@ -6,13 +6,13 @@
 - type: twitter
   icon: "fa-brands fa-x-twitter"
 
-- type: email
-  icon: "fas fa-envelope"
-  noblank: true # open link in current tab
+- type: linkedin
+  icon: "fab fa-linkedin"
+  url: "https://linkedin.com/in/raúl-león"  # open link in current tab
 
-- type: rss
-  icon: "fas fa-rss"
-  noblank: true
+- type: hackthebox
+  icon: "fas fa-cube"
+  url: "https://app.hackthebox.com/profile/1392682"
 # Uncomment and complete the url below to enable more contact options
 #
 # - type: mastodon
