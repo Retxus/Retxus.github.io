@@ -27,25 +27,50 @@ rtt min/avg/max/mdev = 117.141/117.141/117.141/0.000 ms
 
 Vemos que el `ttl` de la máquina es de 63, el cual está próximo a 64 por ende nos encontramos ante una máquina `Linux`.
 
-Ahora, con la herramienta `nmap` lanzamos un escaneo en donde vamos a enumerar los puertos que se encuentran abiertos en la máquina.
+Ahora vamos a identificar los puertos abiertos dentro de la máquina, los invito a usar el siguiente `script` hecho en `bash`.
 
 ```bash
-nmap -p- --open -sS --min-rate 5000 -vvv -n -Pn 10.10.11.8 -oG ports
+#!/bin/bash
+
+GREEN="\e[32m"
+RED="\e[31m"
+RESET="\e[0m"
+
+IP="$1"
+
+if [ -z "$IP" ]; then
+  echo "Uso: $0 <IP>"
+  exit 1
+fi
+
+TEMP_FILE=$(mktemp)
+
+echo -e "${GREEN}[+] Escaneando todos los puertos abiertos... ${RESET}"
+
+nmap -p- --open -sS --min-rate 5000 -vvv -n -Pn "$IP" -oG "$TEMP_FILE"
+
+# Extraer los puertos abiertos
+PORTS=$(grep -oP '\d+/open' "$TEMP_FILE" | awk -F'/' '{print $1}' | tr '\n' ',' | sed 's/,$//'; echo)
+
+rm "$TEMP_FILE"
+
+if [ -z "$PORTS" ]; then
+  echo -e "${RED}[-] No se encontraron puertos abiertos.${RESET}"
+  exit 1
+fi
+
+echo -e "\n${GREEN}[+] Escanenado servicios en los puertos: $PORTS. ${RESET}\n"
+
+nmap -sCV -p"$PORTS" "$IP" -oN target
+
+echo -e "\n${GREEN}[+] Escano completado. Resultados en 'target'.${RESET}\n"
 ```
 
-Aquí generamos un archivo en formato grepeable y hacemos uso de la función <a href="https://gist.github.com/anibalardid/5e05b6472feb3d31116729dc24e6d3e2">extarctPorts</a> de <a href="https://s4vitar.github.io/">s4vitar</a>.
+De preferencia es mejor usar este `script` como `root`, ya que algunos parámetros de `nmap`, requieren de privilegios elevados. Esto al final nos va a generar un archivo `target` que contiene la información de los puertos abiertos dentro de la máquina.
 
 ```bash
-extractPorts ports
+sudo ./scan.sh 10.10.11.44
 ```
-
-Ahora con el número de los puertos copiados en el portapapeles, lanzamos otro escaneo para enumerar el servicio que corren por los puertos.
-
-```bash
-nmap -sCV -p22,5000 10.10.11.8 -oN target
-```
-
-Aquí generamos un archivo en el formato normal de `nmap` en donde se nos muestra más información de los servicios que corren por esos puertos.
 
 ```bash
 PORT     STATE SERVICE VERSION
@@ -89,7 +114,7 @@ Luego de unas pruebas vemos que si ponemos un `;` luego de la fecha podemos ejec
 
 ![](/assets/img/HTB-Headless/3_Headless.png)
 
-Para ganar acceso nos podemos ir a <a href="https://www.revshells.com/">esta</a> web y elegimos la `reverse shell (nc mkfifo)` en formato `URL encode`, o se puede usar cualquier otro payload que les funcione.
+Para ganar acceso nos podemos ir a [esta](https://www.revshells.com/){:target="_blank"} web y elegimos la `reverse shell (nc mkfifo)` en formato `URL encode`, o se puede usar cualquier otro payload que les funcione.
 
 Una vez dentro hacemos en tratamiento de la tty.
 

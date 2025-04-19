@@ -27,13 +27,50 @@ rtt min/avg/max/mdev = 158.555/158.555/158.555/0.000 ms
 
 Vemos que el `ttl` de la máquina es de 63, el cual está próximo a 64 por ende nos encontramos ante una máquina `Linux`.
 
-Ahora, con la herramienta `rustscan` lanzamos un escaneo en donde vamos a enumerar los puertos que se encuentran abiertos en la máquina.
+Ahora vamos a identificar los puertos abiertos dentro de la máquina, los invito a usar el siguiente `script` hecho en `bash`.
 
 ```bash
-rustscan -a 10.10.11.38 --ulimit 5000 -r 1-65535 -- -sS -sCV -Pn -oN target
+#!/bin/bash
+
+GREEN="\e[32m"
+RED="\e[31m"
+RESET="\e[0m"
+
+IP="$1"
+
+if [ -z "$IP" ]; then
+  echo "Uso: $0 <IP>"
+  exit 1
+fi
+
+TEMP_FILE=$(mktemp)
+
+echo -e "${GREEN}[+] Escaneando todos los puertos abiertos... ${RESET}"
+
+nmap -p- --open -sS --min-rate 5000 -vvv -n -Pn "$IP" -oG "$TEMP_FILE"
+
+# Extraer los puertos abiertos
+PORTS=$(grep -oP '\d+/open' "$TEMP_FILE" | awk -F'/' '{print $1}' | tr '\n' ',' | sed 's/,$//'; echo)
+
+rm "$TEMP_FILE"
+
+if [ -z "$PORTS" ]; then
+  echo -e "${RED}[-] No se encontraron puertos abiertos.${RESET}"
+  exit 1
+fi
+
+echo -e "\n${GREEN}[+] Escanenado servicios en los puertos: $PORTS. ${RESET}\n"
+
+nmap -sCV -p"$PORTS" "$IP" -oN target
+
+echo -e "\n${GREEN}[+] Escano completado. Resultados en 'target'.${RESET}\n"
 ```
 
-Guardamos la información en un archivo. (Siempre se recomienda llevar registro de lo que se realiza)
+De preferencia es mejor usar este `script` como `root`, ya que algunos parámetros de `nmap`, requieren de privilegios elevados. Esto al final nos va a generar un archivo `target` que contiene la información de los puertos abiertos dentro de la máquina.
+
+```bash
+sudo ./scan.sh 10.10.11.44
+```
 
 ```bash
 PORT     STATE SERVICE REASON         VERSION
@@ -55,7 +92,7 @@ Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
 
 ## Archivo CIF malicioso
 
-Si nos dirigimos a la página `web` por el puerto `5000` vemos que podemos iniciar sesión o registrarnos, así que procedemos a registrarnos. Una vez ingresado el usuario vemos un apartado donde se puede subir archivos `.cif`, buscando un poco tenemos <a href="https://github.com/materialsproject/pymatgen/security/advisories/GHSA-vgv8-5cpj-qj2f">esto</a>, en donde nos dan un formato de ese tipo y lograr la ejecución de código malicioso (RCE).
+Si nos dirigimos a la página `web` por el puerto `5000` vemos que podemos iniciar sesión o registrarnos, así que procedemos a registrarnos. Una vez ingresado el usuario vemos un apartado donde se puede subir archivos `.cif`, buscando un poco tenemos [esto](https://github.com/materialsproject/pymatgen/security/advisories/GHSA-vgv8-5cpj-qj2f){:target="_blank"}, en donde nos dan un formato de ese tipo y lograr la ejecución de código malicioso (RCE).
 
 
 ```bash
@@ -93,7 +130,7 @@ Para tener las proporciones adecuadas dentro de la `shell` en una ventana de nue
 
 ## Movimiento lateral
 
-Observamos dentro de la ruta `/home/app/instance` una base de datos de tipo `sqlite3`, nos conectamos a ella y vemos dentro una tabla `user` listamos su contenido y vemos unos usuarios con sus contraseñas en formato `MD5`, en <a href="https://crackstation.net/">esta</a> `web` podemos romper los `hashes`
+Observamos dentro de la ruta `/home/app/instance` una base de datos de tipo `sqlite3`, nos conectamos a ella y vemos dentro una tabla `user` listamos su contenido y vemos unos usuarios con sus contraseñas en formato `MD5`, en [esta](https://crackstation.net/){:target="_blank"} `web` podemos romper los `hashes`
 
 ![](/assets/img/HTB-Chemistry/2_Chemistry.png)
 
@@ -123,7 +160,7 @@ Date: Fri, 14 Mar 2025 01:05:35 GMT
 Server: Python/3.9 aiohttp/3.9.1
 ```
 
-Investigando sobre `aiohttp` se encontró <a href="https://security.snyk.io/vuln/SNYK-PYTHON-AIOHTTP-6209406">esto</a>, en donde nos explican sobre un `LFI`, bueno si suponemos que es root quien corre ese servicio, podemos tratar de listar archivos a los cuales no tenemos acceso. Según el `CVE` se atenta contra la ruta `statics` del servidor, pero parece que no existe, pero si usamos curl para lanzar una petición a la `web`, vemos `assets`, entonces vamos a probar allí.
+Investigando sobre `aiohttp` se encontró [esto](https://security.snyk.io/vuln/SNYK-PYTHON-AIOHTTP-6209406){:target="_blank"}, en donde nos explican sobre un `LFI`, bueno si suponemos que es root quien corre ese servicio, podemos tratar de listar archivos a los cuales no tenemos acceso. Según el `CVE` se atenta contra la ruta `statics` del servidor, pero parece que no existe, pero si usamos curl para lanzar una petición a la `web`, vemos `assets`, entonces vamos a probar allí.
 
 
 Bueno tal parece que si se puede, entonces leemos la `id_rsa` de `root` y nos conectamos como dicho usuario para ver la `root.txt`.

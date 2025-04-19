@@ -3,7 +3,7 @@ title: HTB Strutted Writeup
 date: 2025-03-18 19:39:50 -05:00
 author: retxus
 categories: [HTB, Linux]
-tags: [Linux, http, Information leakage, Arbitrary file upload (malicioso JSP file), CVE-2024-53677, abusing sudo privulege(tcpdump)]
+tags: [Linux, http, Information Leakage, Arbitrary file upload (malicioso JSP file), CVE-2024-53677, abusing sudo privulege(tcpdump)]
 comments: false
 image:
   path: /assets/img/HTB-Strutted/Strutted.png
@@ -27,13 +27,50 @@ rtt min/avg/max/mdev = 104.352/104.352/104.352/0.000 ms
 
 Vemos que el `ttl` de la máquina es de 63, el cual está próximo a 64 por ende nos encontramos ante una máquina `Linux`.
 
-Ahora, con la herramienta `rustscan` lanzamos un escaneo en donde vamos a enumerar los puertos que se encuentran abiertos en la máquina.
+Ahora vamos a identificar los puertos abiertos dentro de la máquina, los invito a usar el siguiente `script` hecho en `bash`.
 
 ```bash
-rustscan -a 10.10.11.59 --ulimit 5000 -r 1-65535 -- -sS -sCV -Pn -oN target
+#!/bin/bash
+
+GREEN="\e[32m"
+RED="\e[31m"
+RESET="\e[0m"
+
+IP="$1"
+
+if [ -z "$IP" ]; then
+  echo "Uso: $0 <IP>"
+  exit 1
+fi
+
+TEMP_FILE=$(mktemp)
+
+echo -e "${GREEN}[+] Escaneando todos los puertos abiertos... ${RESET}"
+
+nmap -p- --open -sS --min-rate 5000 -vvv -n -Pn "$IP" -oG "$TEMP_FILE"
+
+# Extraer los puertos abiertos
+PORTS=$(grep -oP '\d+/open' "$TEMP_FILE" | awk -F'/' '{print $1}' | tr '\n' ',' | sed 's/,$//'; echo)
+
+rm "$TEMP_FILE"
+
+if [ -z "$PORTS" ]; then
+  echo -e "${RED}[-] No se encontraron puertos abiertos.${RESET}"
+  exit 1
+fi
+
+echo -e "\n${GREEN}[+] Escanenado servicios en los puertos: $PORTS. ${RESET}\n"
+
+nmap -sCV -p"$PORTS" "$IP" -oN target
+
+echo -e "\n${GREEN}[+] Escano completado. Resultados en 'target'.${RESET}\n"
 ```
 
-Guardamos la información en un archivo. (Siempre se recomienda llevar registro de lo que se realiza)
+De preferencia es mejor usar este `script` como `root`, ya que algunos parámetros de `nmap`, requieren de privilegios elevados. Esto al final nos va a generar un archivo `target` que contiene la información de los puertos abiertos dentro de la máquina.
+
+```bash
+sudo ./scan.sh 10.10.11.44
+```
 
 ```bash
 PORT   STATE SERVICE REASON         VERSION
@@ -67,15 +104,15 @@ En la web vemos un apartado para subir archivos de tipo imagen y también tenemo
 
 ![](/assets/img/HTB-Strutted/1_Strutted.png)
 
-Dentro del `tomcat-users.xml` tenemos un usuario con su credencial, pero no llegamos a ningún lado con eso. Tenemos también un archivo `Dockerfile`, así que podemos suponer que la `web` está desplegada con un contenedor, o parte de ella. En la carpeta `strutted` hay un archivo `pom.xml`, este ya pinta más interesante, podemos ver módulos, dependencias y demás cosas que usa la web, algo que me llama la atención es `strust2.version (6.3.0.1)`, buscando un poco nos encontramos con <a href="https://attackerkb.com/topics/YfjepZ70DS/cve-2024-53677">esta</a> vulnerabilidad interesante, donde mediante un `Arbitrary file upload` podemos subir algún archivo malicioso que nos interese.
+Dentro del `tomcat-users.xml` tenemos un usuario con su credencial, pero no llegamos a ningún lado con eso. Tenemos también un archivo `Dockerfile`, así que podemos suponer que la `web` está desplegada con un contenedor, o parte de ella. En la carpeta `strutted` hay un archivo `pom.xml`, este ya pinta más interesante, podemos ver módulos, dependencias y demás cosas que usa la web, algo que me llama la atención es `strust2.version (6.3.0.1)`, buscando un poco nos encontramos con [esta](https://attackerkb.com/topics/YfjepZ70DS/cve-2024-53677){:target="_blank"} vulnerabilidad interesante, donde mediante un `Arbitrary file upload` podemos subir algún archivo malicioso que nos interese.
 
 ### Subida arbitraria de archivos (CVE-2024-53677)
 
-En esta ocasión usaremos <a href="https://caido.io/">caido</a> para capturar la petición y poder manipularla. Podemos subir cualquier archivo, al fin de cuentas, vamos a jugar con los primeros bytes del archivo para hacerle pensar a la `web` que se trata de un tipo de imagen.
+En esta ocasión usaremos [caido](https://caido.io/){:target="_blank"} para capturar la petición y poder manipularla. Podemos subir cualquier archivo, al fin de cuentas, vamos a jugar con los primeros bytes del archivo para hacerle pensar a la `web` que se trata de un tipo de imagen.
 
 ![](/assets/img/HTB-Strutted/2_Strutted.png)
 
-Vemos que la vulnerabilidad se ejecuta, ahora vamos a tratar de subir una `web_shell.jsp`, podemos hacer uso de <a href="https://github.com/tennc/webshell/blob/master/fuzzdb-webshell/jsp/cmd.jsp">esta</a>.
+Vemos que la vulnerabilidad se ejecuta, ahora vamos a tratar de subir una `web_shell.jsp`, podemos hacer uso de [esta](https://github.com/tennc/webshell/blob/master/fuzzdb-webshell/jsp/cmd.jsp){:target="_blank"}.
 
 ![](/assets/img/HTB-Strutted/3_Strutted.png)
 
@@ -127,7 +164,7 @@ Si la probamos con `su james`, no es posible conectarse, pero aún tenemos `ssh`
 
 ## Escalada de privilegios.
 
-Si listamos nuestro privilegio a nivel de `sudo`, vemos que podemos ejecutar `tcpdump` como `root` sin proporcionar contraseña, en <a href="https://gtfobins.github.io/gtfobins/tcpdump/#sudo"GTFObins</a> nos indican una forma de como podemos escalar nuestro privilegio, yo lo que hice fue asignar permisos `SUID` al binario `/bin/bash`.
+Si listamos nuestro privilegio a nivel de `sudo`, vemos que podemos ejecutar `tcpdump` como `root` sin proporcionar contraseña, en [GTFObins](https://gtfobins.github.io/gtfobins/tcpdump/#sudo){:target="_blank"} nos indican una forma de como podemos escalar nuestro privilegio, yo lo que hice fue asignar permisos `SUID` al binario `/bin/bash`.
 
 ```bash
 COMMAND='chmod +s /bin/bash' & TF=$(mktemp) & echo "$COMMAND" > $TF & chmod +x $TF & sudo /usr/sbin/tcpdump -ln -i lo -w /dev/null -W 1 -G 1 -z $TF -Z root

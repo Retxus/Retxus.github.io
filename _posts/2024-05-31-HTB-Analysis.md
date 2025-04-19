@@ -27,25 +27,50 @@ rtt min/avg/max/mdev = 96.571/96.571/96.571/0.000 ms
 
 Vemos que el `ttl` de la máquina es de 127, el cual está próximo a 128 por ende nos encontramos ante una máquina `Windows`.
 
-Ahora, con la herramienta `nmap` lanzamos un escaneo en donde vamos a enumerar los puertos que se encuentran abiertos en la máquina.
+Ahora vamos a identificar los puertos abiertos dentro de la máquina, los invito a usar el siguiente `script` hecho en `bash`.
 
 ```bash
-nmap -p- --epen -sS --min-rate 5000 -vvv -n -Pn 10.10.11.250 -oG ports
+#!/bin/bash
+
+GREEN="\e[32m"
+RED="\e[31m"
+RESET="\e[0m"
+
+IP="$1"
+
+if [ -z "$IP" ]; then
+  echo "Uso: $0 <IP>"
+  exit 1
+fi
+
+TEMP_FILE=$(mktemp)
+
+echo -e "${GREEN}[+] Escaneando todos los puertos abiertos... ${RESET}"
+
+nmap -p- --open -sS --min-rate 5000 -vvv -n -Pn "$IP" -oG "$TEMP_FILE"
+
+# Extraer los puertos abiertos
+PORTS=$(grep -oP '\d+/open' "$TEMP_FILE" | awk -F'/' '{print $1}' | tr '\n' ',' | sed 's/,$//'; echo)
+
+rm "$TEMP_FILE"
+
+if [ -z "$PORTS" ]; then
+  echo -e "${RED}[-] No se encontraron puertos abiertos.${RESET}"
+  exit 1
+fi
+
+echo -e "\n${GREEN}[+] Escanenado servicios en los puertos: $PORTS. ${RESET}\n"
+
+nmap -sCV -p"$PORTS" "$IP" -oN target
+
+echo -e "\n${GREEN}[+] Escano completado. Resultados en 'target'.${RESET}\n"
 ```
 
-Aquí generamos un archivo en formato grepeable y hacemos uso de la función <a href="https://gist.github.com/anibalardid/5e05b6472feb3d31116729dc24e6d3e2">extarctPorts</a> de <a href="https://s4vitar.github.io/">s4vitar</a>.
+De preferencia es mejor usar este `script` como `root`, ya que algunos parámetros de `nmap`, requieren de privilegios elevados. Esto al final nos va a generar un archivo `target` que contiene la información de los puertos abiertos dentro de la máquina.
 
 ```bash
-extractPorts ports
+sudo ./scan.sh 10.10.11.44
 ```
-
-Ahora, con el número de los puertos copiados en el portapapeles, lanzamos otro escaneo para enumerar el servicio que corren por los puertos.
-
-```bash
-nmap -sCV -p53,80,88,135,139,389,445,464,593,636,3268,3269,3306,5985,9389,33060,47001,49664,49665,49666,49667,49671,49674,49675,49676,49677,49684,49711,50228 10.10.11.250 -oN target
-```
-
-Aquí generamos un archivo en el formato normal de `nmap` en donde se nos muestra más información de los servicios que corren por esos puertos.
 
 ```bash
 PORT      STATE SERVICE       versión
@@ -143,7 +168,7 @@ Ahora vamos a la web, precisamente en el subdominio `internal.analysis.htb`, vem
 ffuf -c -t 100 -w diccionario.txt -u http://internal.analysis.htb/FUZZ
 ```
 
-Nos devuelve algunas rutas, pero nada interesante, así que seguimos buscando sobre las nuevas rutas, como la web está hecha con php según <a href="https://www.wappalyzer.com/?utm_source=popup&utm_medium=extension&utm_campaign=wappalyzer">wappalyzer</a>, comenzamos a buscar con extensión `php`.
+Nos devuelve algunas rutas, pero nada interesante, así que seguimos buscando sobre las nuevas rutas, como la web está hecha con php según [wappalyzer](https://www.wappalyzer.com/?utm_source=popup&utm_medium=extension&utm_campaign=wappalyzer){:target="_blank"}, comenzamos a buscar con extensión `php`.
 
 ```bash
 ffuf -c -t 100 -w diccionario.txt -u http://internal.analysis.htb/users/FUZZ.php
@@ -238,7 +263,7 @@ Logramos ingresar como el usuario `jdoe` y podemos ver la primera flag.
 Seguimos enumerando par ver como lograr obtener acceso como el usuario `Administrador`, buscando un poco vemos algo llamado `Snort`, podemos ver su versión.
 ![](/assets/img/HTB-Analysis/10_Analysis.png)
 
-Buscando un poco <a href="https://packetstormsecurity.com/files/138915/Snort-2.9.7.0-WIN32-DLL-Hijacking.html">aquí</a>, nos explican que esa versión es vulnerable y como explotar esa vulnerabilidad.
+Buscando un poco [aquí](https://packetstormsecurity.com/files/138915/Snort-2.9.7.0-WIN32-DLL-Hijacking.html){:target="_blank"}, nos explican que esa versión es vulnerable y como explotar esa vulnerabilidad.
 
 Para ello nos creamos un pequeño código en `C` y veamos que se acontece.
 
